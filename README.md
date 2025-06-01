@@ -26,6 +26,7 @@ Member functions:
 ```c++
 using namespace rdbc = roboss::dbc;
 class MyClass {
+public:
   constexpr bool f_pre(int input1) {
     return PRE(input1 > 2)
         && PRE(a_member_variable_ == 2);
@@ -41,7 +42,8 @@ class MyClass {
     return c.post_check(this, 0.2);
   }
 
-  int a_member_variable_;
+private:
+  int a_member_variable_ = 2;
 };
 ```
 
