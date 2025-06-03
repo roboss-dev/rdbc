@@ -16,20 +16,37 @@
 #include <iostream>
 #include <type_traits>
 #include <utility>
-#include <exception>
+#include <stdexcept>
 #include <cstddef>
 
 // TODO use stack trace instead
-#define PRE(predicate) roboss::dbc::contract_violation_logger(predicate, "PRECONDITION", __FILE__, __LINE__)
-#define POST(predicate) roboss::dbc::contract_violation_logger(predicate, "POSTCONDITION", __FILE__, __LINE__)
-#define INV(predicate) roboss::dbc::contract_violation_logger(predicate, "INVARIANT", __FILE__, __LINE__)
+#define PRE(predicate) roboss::dbc::contract_violation_handler(predicate, "PRECONDITION", __FILE__, __LINE__)
+#define POST(predicate) roboss::dbc::contract_violation_handler(predicate, "POSTCONDITION", __FILE__, __LINE__)
+#define INV(predicate) roboss::dbc::contract_violation_handler(predicate, "INVARIANT", __FILE__, __LINE__)
+
+#ifndef RDBC_TESTING
+#define RDBC_NOEXCEPT true
+#else
+#define RDBC_NOEXCEPT false
+#endif
 
 namespace roboss {
 namespace dbc {
 
-constexpr bool contract_violation_logger(bool predicate, const char* condition, const char* file, int loc) {
-  if(!predicate) {    
-    std::cerr << condition << " VIOLATION: " << file << ": " << loc << std::endl;
+struct ContractViolation {
+  const char * condition;
+  const char * file;
+  int loc;
+};
+
+constexpr bool contract_violation_handler(bool predicate, const char* condition, const char* file, int loc) {
+  if(!predicate) {
+    if constexpr (RDBC_NOEXCEPT) {
+      std::cerr << condition << " VIOLATION: " << file << ": " << loc << std::endl;
+    }
+    else {
+      throw ContractViolation{condition, file, loc};
+    }
   }
   return predicate;
 }
@@ -162,6 +179,10 @@ constexpr bool invoke_condition_function() {
   return condition_function();
 }
 
+#ifdef RDBC_TESTING_INTERNAL
+thread_local bool terminate_called = false;
+#endif
+
 template <ConditionType condition_type, auto condition_function>
 struct ContractCondition
 {
@@ -175,8 +196,12 @@ struct ContractCondition
 
   inline ~ContractCondition() {
     if(!checked_) {
+#ifndef RDBC_TESTING_INTERNAL
       std::cerr << condition_name(condition_type) << " NOT CHECKED" << std::endl;
       std::terminate();
+#else
+      terminate_called = true;
+#endif
     }
   }
 
