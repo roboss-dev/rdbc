@@ -40,7 +40,7 @@ TEST(Basic, ConditionChecksAreEnforced) {
     EXPECT_TRUE(rdbc::terminate_called);
 
     rdbc::terminate_called = false;
-    f_void_to_void_no_pre_check();
+    f_no_pre_check();
     EXPECT_TRUE(rdbc::terminate_called);
 
     rdbc::terminate_called = false;
@@ -55,7 +55,7 @@ TEST(Optimized, ConditionChecksAreEnforcedInDebug) {
     EXPECT_TRUE(rdbc::terminate_called);
 
     rdbc::terminate_called = false;
-    f_void_to_void_no_pre_check(rdbc::SKIP_PRE_IN_RELEASE);
+    f_no_pre_check(rdbc::SKIP_PRE_IN_RELEASE);
     EXPECT_TRUE(rdbc::terminate_called);
 
     rdbc::terminate_called = false;
@@ -69,21 +69,17 @@ constexpr bool int_pre(int input) {
     return PRE(input > 0);
 }
 constexpr bool int_post(int ret) {
-    return POST(ret > 0);
+    return POST(ret > 2);
 }
-inline int f_failing_pre(int input = 0, rdbc::Contract<rdbc::Pre<&int_pre>, rdbc::Post<&int_post>> c = {}) {
+inline int f(int input, rdbc::Contract<rdbc::Pre<&int_pre>, rdbc::Post<&int_post>> c = {}) {
     c.pre_check(input);
-    return c.post_check(1);
-}
-inline int f_failing_post(int input = 1, rdbc::Contract<rdbc::Pre<&int_pre>, rdbc::Post<&int_post>> c = {}) {
-    c.pre_check(input);
-    return c.post_check(0);
+    return c.post_check(input+1);
 }
 
 TEST(Basic, ProgramTerminatesUponContractViolation) {
     EXPECT_THROW([&]{
         try {
-            f_failing_pre();
+            f(0);
         }
         catch(rdbc::ContractViolation e) {
             EXPECT_STREQ(e.condition, "PRECONDITION");
@@ -93,12 +89,16 @@ TEST(Basic, ProgramTerminatesUponContractViolation) {
 
     EXPECT_THROW([&]{
         try {
-            f_failing_post();
+            f(1);
         }
         catch(rdbc::ContractViolation e) {
             EXPECT_STREQ(e.condition, "POSTCONDITION");
             throw e;
         }
     }(), rdbc::ContractViolation);
+}
+
+TEST(Basic, ProgramContinuesWithoutContractViolation) {
+    EXPECT_NO_THROW(f(2));
 }
 
