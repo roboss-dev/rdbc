@@ -15,7 +15,7 @@ constexpr bool f_pre(int input1) {
 constexpr bool f_post(double ret) {
   return POST(ret < 0.5);
 }
-double f(int input1, rdbc::Contract<rbdc::Pre<&f_pre>, rbdc::Post<&f_post>> contract = {}) {
+double f(int input1, rdbc::PrePost<&f_pre, &f_post> contract = {}) {
   contract.pre_check(input1);
   // ...my function body...
   return c.post_check(0.2);
@@ -35,7 +35,7 @@ public:
     return POST(ret < 0.5)
         && POST(a_member_variable_ == 3);
   }
-  double f(int input1, rdbc::Contract<rbdc::Pre<&f_pre>, rbdc::Post<&f_post>> contract = {}) {
+  double f(int input1, rdbc::PrePost<&f_pre, &f_post> contract = {}) {
     contract.pre_check(this, input1);
     // ...my function body...
     a_member_variable_ = 3;
