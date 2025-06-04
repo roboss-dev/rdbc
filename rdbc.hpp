@@ -142,27 +142,16 @@ struct Condition : AnyCondition {
 };
 
 template <auto condition_function>
-using Pre = Condition<condition_function, ConditionType::PREC>;
+using PreCondition = Condition<condition_function, ConditionType::PREC>;
 
 template <auto condition_function>
-using Post = Condition<condition_function, ConditionType::POSTC>;
+using PostCondition = Condition<condition_function, ConditionType::POSTC>;
 
 struct NoCondition : AnyCondition
 {
   static constexpr bool condition_function_() { return true; }
   static constexpr auto type_ = ConditionType::NOC;
 };
-
-template <typename Condition1, typename Condition2, ConditionType type>
-using condition_by_type_t = std::conditional_t<
-  Condition1::type_ == type,
-  Condition1,
-  std::conditional_t<
-    Condition2::type_ == type,
-    Condition2,
-    NoCondition
-  >
->;
 
 template <auto condition_function, typename Arg1, typename ... Arg>
 constexpr bool invoke_condition_function(Arg1 && arg1, Arg &&... arg) {
@@ -212,7 +201,7 @@ template <typename Condition>
 struct ContractPrecondition;
 
 template <typename ... Arg, ConditionFunction<Arg...> condition_function>
-struct ContractPrecondition<Pre<condition_function>>
+struct ContractPrecondition<PreCondition<condition_function>>
 {
   constexpr ContractPrecondition(Optimization precondition_optimization)
   : precondition_optimization_(precondition_optimization)
@@ -228,7 +217,7 @@ struct ContractPrecondition<Pre<condition_function>>
 };
 
 template <typename Object, typename ... Arg, ConditionMemberFunction<Object, Arg...> condition_function>
-struct ContractPrecondition<Pre<condition_function>>
+struct ContractPrecondition<PreCondition<condition_function>>
 {
   constexpr ContractPrecondition(Optimization precondition_optimization)
   : precondition_optimization_(precondition_optimization)
@@ -254,7 +243,7 @@ template <typename Condition, typename Ret, typename Args>
 struct ContractPostcondition;
 
 template <typename Ret, typename ... Arg, ConditionFunction<Ret, Arg...> condition_function>
-struct ContractPostcondition<Post<condition_function>, Ret, std::tuple<Arg...>>
+struct ContractPostcondition<PostCondition<condition_function>, Ret, std::tuple<Arg...>>
 {
   using RetT = std::remove_cv_t<std::remove_reference_t<Ret>>;
   [[nodiscard]]
@@ -272,7 +261,7 @@ struct ContractPostcondition<Post<condition_function>, Ret, std::tuple<Arg...>>
 };
 
 template <typename Object, typename Ret, typename ... Arg, ConditionMemberFunction<Object, Ret, Arg...> condition_function>
-struct ContractPostcondition<Post<condition_function>, Ret, std::tuple<Arg...>>
+struct ContractPostcondition<PostCondition<condition_function>, Ret, std::tuple<Arg...>>
 {
   using RetT = std::remove_cv_t<std::remove_reference_t<Ret>>;
   [[nodiscard]]
@@ -290,7 +279,7 @@ struct ContractPostcondition<Post<condition_function>, Ret, std::tuple<Arg...>>
 };
 
 template <ConditionFunction<> condition_function>
-struct ContractPostcondition<Post<condition_function>, void, std::tuple<>>
+struct ContractPostcondition<PostCondition<condition_function>, void, std::tuple<>>
 {
   constexpr void post_check(Optimization optimization = NoOpt) {
     impl_.check(optimization);
@@ -309,21 +298,30 @@ using contract_precondition_t = ContractPrecondition<Condition>;
 template <typename Condition>
 using contract_postcondition_t = ContractPostcondition<Condition, typename Condition::Ret, typename Condition::Args>;
 
-template <typename Condition1, typename Condition2 = NoCondition>
-struct Contract : contract_precondition_t<condition_by_type_t<Condition1, Condition2, ConditionType::PREC>>,
-                  contract_postcondition_t<condition_by_type_t<Condition1, Condition2, ConditionType::POSTC>>
+template <typename PreCondition, typename PostCondition>
+struct Contract : contract_precondition_t<PreCondition>,
+                  contract_postcondition_t<PostCondition>
 {
-  static_assert(std::is_base_of_v<AnyCondition, Condition1>, "Condition1 invalid");
-  static_assert(std::is_base_of_v<AnyCondition, Condition2>, "Condition2 invalid");
+  static_assert(std::is_base_of_v<AnyCondition, PreCondition>, "PreCondition invalid");
+  static_assert(std::is_base_of_v<AnyCondition, PostCondition>, "PostCondition invalid");
 
   constexpr Contract(Optimization precondition_optimization)
-  : ContractPrecondition<condition_by_type_t<Condition1, Condition2, ConditionType::PREC>>(precondition_optimization)
+  : ContractPrecondition<PreCondition>(precondition_optimization)
   { }
 
   constexpr Contract()
   : Contract(NoOpt)
   { }
 };
+
+template <auto precondition_function>
+using Pre = Contract<PreCondition<precondition_function>, NoCondition>;
+
+template <auto postcondition_function>
+using Post = Contract<NoCondition, PostCondition<postcondition_function>>;
+
+template <auto precondition_function, auto postcondition_function>
+using PrePost = Contract<PreCondition<precondition_function>, PostCondition<postcondition_function>>;
 
 
 }

@@ -23,13 +23,13 @@ constexpr bool void_pre() {
 constexpr bool void_post() {
     return POST(true);
 }
-inline void f_no_check(rdbc::Contract<rdbc::Pre<&void_pre>, rdbc::Post<&void_post>> c = {}) {
+inline void f_no_check(rdbc::PrePost<&void_pre, &void_post> c = {}) {
     // noop
 }
-inline void f_no_pre_check(rdbc::Contract<rdbc::Pre<&void_pre>, rdbc::Post<&void_post>> c = {}) {
+inline void f_no_pre_check(rdbc::PrePost<&void_pre, &void_post> c = {}) {
     c.post_check();
 }
-inline void f_no_post_check(rdbc::Contract<rdbc::Pre<&void_pre>, rdbc::Post<&void_post>> c = {}) {
+inline void f_no_post_check(rdbc::PrePost<&void_pre, &void_post> c = {}) {
     c.pre_check();
 }
 
@@ -71,7 +71,7 @@ constexpr bool int_pre(int input) {
 constexpr bool int_post(int ret) {
     return POST(ret > 2);
 }
-inline int f(int input, rdbc::Contract<rdbc::Pre<&int_pre>, rdbc::Post<&int_post>> c = {}) {
+inline int f(int input, rdbc::PrePost<&int_pre, &int_post> c = {}) {
     c.pre_check(input);
     return c.post_check(input+1);
 }
@@ -111,7 +111,7 @@ struct MyClass {
         return POST(ret > 2)
             && POST(member_variable_ == 3);
     }
-    inline int f(int input, rdbc::Contract<rdbc::Pre<&MyClass::int_pre>, rdbc::Post<&MyClass::int_post>> c = {}) {
+    inline int f(int input, rdbc::PrePost<&MyClass::int_pre, &MyClass::int_post> c = {}) {
         c.pre_check(this, input);
         member_variable_ = 3;
         return c.post_check(this, input+1);
