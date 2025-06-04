@@ -102,3 +102,25 @@ TEST(Basic, ProgramContinuesWithoutContractViolation) {
     EXPECT_NO_THROW(f(2));
 }
 
+struct MyClass {
+    constexpr bool int_pre(int input) const {
+        return PRE(input > 0)
+            && PRE(member_variable_ == 2);
+    }
+    constexpr bool int_post(int ret) const {
+        return POST(ret > 2)
+            && POST(member_variable_ == 3);
+    }
+    inline int f(int input, rdbc::Contract<rdbc::Pre<&MyClass::int_pre>, rdbc::Post<&MyClass::int_post>> c = {}) {
+        c.pre_check(this, input);
+        member_variable_ = 3;
+        return c.post_check(this, input+1);
+    }
+    int member_variable_ = 2;
+};
+
+TEST(Member, ProgramContinuesWithoutContractViolation) {
+    MyClass my_class;
+    EXPECT_NO_THROW(my_class.f(2));
+}
+
