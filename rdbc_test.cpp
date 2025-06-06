@@ -76,3 +76,21 @@ TEST(Member, ProgramContinuesWithoutContractViolation) {
     EXPECT_NO_THROW(my_class.f(2));
 }
 
+
+template <typename T>
+constexpr bool neg_pre() {
+    return PRE(std::is_signed_v<T>);
+}
+
+template <typename T>
+T neg(T v, rdbc::Pre<&neg_pre<T>> c = {}) {
+    c.pre_check();
+    return -v;
+}
+
+TEST(Meta, TypeTraitsCanBeChecked) {
+    EXPECT_NO_THROW(neg<int>(1));
+    EXPECT_THROW(neg<unsigned int>(1), rdbc::ContractViolation);
+}
+
+

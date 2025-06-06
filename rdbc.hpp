@@ -151,6 +151,8 @@ struct NoCondition : AnyCondition
 {
   static constexpr bool condition_function_() { return true; }
   static constexpr auto type_ = ConditionType::NOC;
+  using Ret = void;
+  using Args = std::tuple<>;
 };
 
 template <auto condition_function, typename Arg1, typename ... Arg>
