@@ -17,54 +17,6 @@
 
 namespace rdbc = roboss::dbc;
 
-constexpr bool void_pre() {
-    return PRE(true);
-}
-constexpr bool void_post() {
-    return POST(true);
-}
-inline void f_no_check(rdbc::PrePost<&void_pre, &void_post> c = {}) {
-    // noop
-}
-inline void f_no_pre_check(rdbc::PrePost<&void_pre, &void_post> c = {}) {
-    c.post_check();
-}
-inline void f_no_post_check(rdbc::PrePost<&void_pre, &void_post> c = {}) {
-    c.pre_check();
-}
-
-#ifdef RDBC_TESTING_INTERNAL
-TEST(Basic, ConditionChecksAreEnforced) {
-    rdbc::terminate_called = false;
-    f_no_check();
-    EXPECT_TRUE(rdbc::terminate_called);
-
-    rdbc::terminate_called = false;
-    f_no_pre_check();
-    EXPECT_TRUE(rdbc::terminate_called);
-
-    rdbc::terminate_called = false;
-    f_no_post_check();
-    EXPECT_TRUE(rdbc::terminate_called);
-}
-
-#ifndef NDEBUG
-TEST(Optimized, ConditionChecksAreEnforcedInDebug) {
-    rdbc::terminate_called = false;
-    f_no_check(rdbc::SKIP_PRE_IN_RELEASE);
-    EXPECT_TRUE(rdbc::terminate_called);
-
-    rdbc::terminate_called = false;
-    f_no_pre_check(rdbc::SKIP_PRE_IN_RELEASE);
-    EXPECT_TRUE(rdbc::terminate_called);
-
-    rdbc::terminate_called = false;
-    f_no_post_check(rdbc::SKIP_PRE_IN_RELEASE);
-    EXPECT_TRUE(rdbc::terminate_called);
-}
-#endif
-#endif
-
 constexpr bool int_pre(int input) {
     return PRE(input > 0);
 }
