@@ -184,7 +184,7 @@ struct ContractCondition
   }
 
   inline ~ContractCondition() {
-    if(!checked_) {
+    if(!checked_ && std::uncaught_exceptions() == 0) {
 #ifndef RDBC_TESTING_INTERNAL
       std::cerr << condition_name(condition_type) << " NOT CHECKED" << std::endl;
       std::terminate();
