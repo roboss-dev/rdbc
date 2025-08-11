@@ -16,3 +16,8 @@ target_compile_options(rdbc_test PRIVATE -DRDBC_TESTING)
 target_compile_options(rdbc_test_nocheck PRIVATE -DRDBC_TESTING -DRDBC_TESTING_INTERNAL)
 
 gtest_discover_tests(rdbc_test)
+
+install(
+    FILES rdbc.hpp
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include
+)
