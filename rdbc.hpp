@@ -248,13 +248,16 @@ template <typename Ret, typename ... Arg, ConditionFunction<Ret, Arg...> conditi
 struct ContractPostcondition<PostCondition<condition_function>, Ret, std::tuple<Arg...>>
 {
   using RetT = std::remove_cv_t<std::remove_reference_t<Ret>>;
+  constexpr void post_check(RetT const& arg1, Arg  ... arg, Optimization optimization = NoOpt) {
+    impl_.check(optimization, arg1, arg...);
+  }
   [[nodiscard]]
-  constexpr RetT post_check(RetT && ret, Arg  ... arg, Optimization optimization = NoOpt) {
+  constexpr RetT post_check_ret(RetT && ret, Arg  ... arg, Optimization optimization = NoOpt) {
     impl_.check(optimization, ret, arg...);
     return ret; // TODO support RVO
   }
   [[nodiscard]]
-  constexpr RetT post_check(RetT & ret, Arg ... arg, Optimization optimization = NoOpt) {
+  constexpr RetT post_check_ret(RetT & ret, Arg ... arg, Optimization optimization = NoOpt) {
     impl_.check(optimization, ret, arg...);
     return std::move(ret); // TODO support RVO
   }
@@ -266,13 +269,16 @@ template <typename Object, typename Ret, typename ... Arg, ConditionMemberFuncti
 struct ContractPostcondition<PostCondition<condition_function>, Ret, std::tuple<Arg...>>
 {
   using RetT = std::remove_cv_t<std::remove_reference_t<Ret>>;
+  constexpr void post_check(Object const* object, RetT const& arg1, Arg  ... arg, Optimization optimization = NoOpt) {
+    impl_.check(optimization, object, arg1, arg...);
+  }
   [[nodiscard]]
-  constexpr RetT post_check(Object const* object, RetT && ret, Arg ... arg, Optimization optimization = NoOpt) {
+  constexpr RetT post_check_ret(Object const* object, RetT && ret, Arg ... arg, Optimization optimization = NoOpt) {
     impl_.check(optimization, object, ret, arg...);
     return ret; // TODO support RVO
   }
   [[nodiscard]]
-  constexpr RetT post_check(Object const* object, RetT & ret, Arg ... arg, Optimization optimization = NoOpt) {
+  constexpr RetT post_check_ret(Object const* object, RetT & ret, Arg ... arg, Optimization optimization = NoOpt) {
     impl_.check(optimization, object, ret, arg...);
     return std::move(ret); // TODO support RVO
   }
@@ -324,6 +330,15 @@ using Post = Contract<NoCondition, PostCondition<postcondition_function>>;
 
 template <auto precondition_function, auto postcondition_function>
 using PrePost = Contract<PreCondition<precondition_function>, PostCondition<postcondition_function>>;
+
+struct Contractual {
+  template <typename ConstructorContract, typename ... Arg>
+  constexpr Contractual(ConstructorContract & contract, Arg &&... arg) noexcept {
+    contract.pre_check(std::forward<Arg&&>(arg)...);
+  }
+
+  constexpr Contractual() noexcept = default;
+};
 
 
 }

@@ -25,7 +25,7 @@ constexpr bool int_post(int ret) {
 }
 inline int f(int input, rdbc::PrePost<&int_pre, &int_post> c = {}) {
     c.pre_check(input);
-    return c.post_check(input+1);
+    return c.post_check_ret(input+1);
 }
 
 TEST(Basic, ProgramTerminatesUponContractViolation) {
@@ -66,7 +66,7 @@ struct MyClass {
     inline int f(int input, rdbc::PrePost<&MyClass::int_pre, &MyClass::int_post> c = {}) {
         c.pre_check(this, input);
         member_variable_ = 3;
-        return c.post_check(this, input+1);
+        return c.post_check_ret(this, input+1);
     }
     int member_variable_ = 2;
 };
