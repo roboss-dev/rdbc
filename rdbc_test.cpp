@@ -18,10 +18,10 @@
 namespace rdbc = roboss::dbc;
 
 constexpr bool int_pre(int input) {
-    return PRE(input > 0);
+    return CHECK(input > 0);
 }
 constexpr bool int_post(int ret) {
-    return POST(ret > 2);
+    return CHECK(ret > 2);
 }
 inline int f(int input, rdbc::PrePost<&int_pre, &int_post> c = {}) {
     c.pre_check(input);
@@ -34,7 +34,7 @@ TEST(Basic, ProgramTerminatesUponContractViolation) {
             f(0);
         }
         catch(rdbc::ContractViolation e) {
-            EXPECT_STREQ(e.condition, "PRECONDITION");
+            EXPECT_STREQ(e.condition, "input > 0");
             throw e;
         }
     }(), rdbc::ContractViolation);
@@ -44,7 +44,7 @@ TEST(Basic, ProgramTerminatesUponContractViolation) {
             f(1);
         }
         catch(rdbc::ContractViolation e) {
-            EXPECT_STREQ(e.condition, "POSTCONDITION");
+            EXPECT_STREQ(e.condition, "ret > 2");
             throw e;
         }
     }(), rdbc::ContractViolation);
@@ -56,12 +56,12 @@ TEST(Basic, ProgramContinuesWithoutContractViolation) {
 
 struct MyClass {
     constexpr bool int_pre(int input) const {
-        return PRE(input > 0)
-            && PRE(member_variable_ == 2);
+        return CHECK(input > 0)
+            && CHECK(member_variable_ == 2);
     }
     constexpr bool int_post(int ret) const {
-        return POST(ret > 2)
-            && POST(member_variable_ == 3);
+        return CHECK(ret > 2)
+            && CHECK(member_variable_ == 3);
     }
     inline int f(int input, rdbc::PrePost<&MyClass::int_pre, &MyClass::int_post> c = {}) {
         c.pre_check(this, input);
@@ -79,7 +79,7 @@ TEST(Member, ProgramContinuesWithoutContractViolation) {
 
 template <typename T>
 constexpr bool neg_pre() {
-    return PRE(std::is_signed_v<T>);
+    return CHECK(std::is_signed_v<T>);
 }
 
 template <typename T>

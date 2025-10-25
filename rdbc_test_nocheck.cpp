@@ -18,10 +18,10 @@
 namespace rdbc = roboss::dbc;
 
 constexpr bool void_pre() {
-    return PRE(true);
+    return CHECK(true);
 }
 constexpr bool void_post() {
-    return POST(true);
+    return CHECK(true);
 }
 inline void f_no_check(rdbc::PrePost<&void_pre, &void_post> c = {}) {
     // noop

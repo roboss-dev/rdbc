@@ -16,57 +16,48 @@
 #include <iostream>
 #include <type_traits>
 #include <utility>
-#include <stdexcept>
 #include <cstddef>
 
-// TODO use stack trace instead
-#define PRE(predicate) roboss::dbc::contract_violation_handler(predicate, "PRECONDITION", __FILE__, __LINE__)
-#define POST(predicate) roboss::dbc::contract_violation_handler(predicate, "POSTCONDITION", __FILE__, __LINE__)
-#define INV(predicate) roboss::dbc::contract_violation_handler(predicate, "INVARIANT", __FILE__, __LINE__)
+#define CHECK(PREDICATE) roboss::dbc::internal::check(PREDICATE, #PREDICATE, __FILE__, __LINE__)
 
 #ifndef RDBC_TESTING
 #define RDBC_NOEXCEPT true
 #else
 #define RDBC_NOEXCEPT false
+#define RDBC_EXCEPTIONS
 #endif
+
+#ifdef RDBC_EXCEPTIONS
+#include <stdexcept>
+#endif
+
 
 namespace roboss {
 namespace dbc {
 
 struct ContractViolation {
-  const char * condition;
-  const char * file;
-  int loc;
+  const char * condition = nullptr;
+  const char * file = nullptr;
+  std::size_t line = 0;
 };
 
-constexpr bool contract_violation_handler(bool predicate, const char* condition, const char* file, int loc) {
-  if(!predicate) {
-    if constexpr (RDBC_NOEXCEPT) {
-      std::cerr << condition << " VIOLATION: " << file << ": " << loc << std::endl;
-    }
-    else {
-      throw ContractViolation{condition, file, loc};
-    }
-  }
+
+namespace internal {
+
+struct CheckResult
+{
+  bool has_violation = false;
+  ContractViolation violation;
+};
+
+inline thread_local CheckResult current_result = {false, nullptr, nullptr, 0};
+
+constexpr bool check(bool predicate, const char* predicate_string, const char* file, std::size_t line) noexcept(RDBC_NOEXCEPT) {
+  current_result = {predicate, predicate_string, file, line};
   return predicate;
 }
 
-enum struct ConditionType {
-  PREC,
-  POSTC,
-  INVA,
-  NOC
-};
 
-constexpr const char* ConditionName[] = {
-  "PRECONDITION",
-  "POSTCONDITION",
-  "INVARIANT",
-  "NOCONDITION"
-};
-
-constexpr auto condition_name(ConditionType type) {
-  return ConditionName[static_cast<int>(type)];
 }
 
 enum Optimization {
@@ -132,25 +123,17 @@ struct signature_helper<bool(*)()> {
 template <auto condition_function>
 using signature = signature_helper<decltype(condition_function)>;
 
-template <auto condition_function, ConditionType condition_type>
+template <auto condition_function>
 struct Condition : AnyCondition {
   static_assert(is_condition_function<decltype(condition_function)>::value);
   static constexpr auto condition_function_ = condition_function;
-  static constexpr auto type_ = condition_type;
   using Ret = typename signature<condition_function>::FirstArg;
   using Args = typename signature<condition_function>::Args;
 };
 
-template <auto condition_function>
-using PreCondition = Condition<condition_function, ConditionType::PREC>;
-
-template <auto condition_function>
-using PostCondition = Condition<condition_function, ConditionType::POSTC>;
-
 struct NoCondition : AnyCondition
 {
   static constexpr bool condition_function_() { return true; }
-  static constexpr auto type_ = ConditionType::NOC;
   using Ret = void;
   using Args = std::tuple<>;
 };
@@ -174,13 +157,20 @@ constexpr bool invoke_condition_function() {
 thread_local bool terminate_called = false;
 #endif
 
-template <ConditionType condition_type, auto condition_function, bool cpp17_constexpr = false>
+template <auto condition_function, bool cpp17_constexpr = false>
 struct ContractCondition
 {
   template <typename ... Arg>
   constexpr void check(Optimization optimization, Arg &&... arg) {
     if(optimization != Opt && !invoke_condition_function<condition_function>(arg...)) {
-      std::terminate();
+      if constexpr(RDBC_NOEXCEPT) {
+        std::cerr << "CONTRACT VIOLATION - the following condition was not true:\n\t" << internal::current_result.violation.condition
+          << "\nin file:\n\t " << internal::current_result.violation.file << "\nat line:\n\t " << internal::current_result.violation.line << std::endl;
+        std::terminate();
+      }
+      else {
+        throw internal::current_result.violation;
+      }
     }
     checked_ = true;
   }
@@ -188,7 +178,7 @@ struct ContractCondition
   inline ~ContractCondition() {
     if(!checked_ && std::uncaught_exceptions() == 0) {
 #ifndef RDBC_TESTING_INTERNAL
-      std::cerr << condition_name(condition_type) << " NOT CHECKED" << std::endl;
+      std::cerr << "CONTRACT NOT CHECKED" << std::endl;
       std::terminate();
 #else
       terminate_called = true;
@@ -199,8 +189,8 @@ struct ContractCondition
   bool checked_ = false;
 };
 
-template <ConditionType condition_type, auto condition_function>
-struct ContractCondition<condition_type, condition_function, true>
+template <auto condition_function>
+struct ContractCondition<condition_function, true>
 {
   template <typename ... Arg>
   constexpr void check(Optimization optimization, Arg &&... arg) {
@@ -214,7 +204,7 @@ template <typename Condition, bool cpp17_constexpr>
 struct ContractPrecondition;
 
 template <typename ... Arg, ConditionFunction<Arg...> condition_function, bool cpp17_constexpr>
-struct ContractPrecondition<PreCondition<condition_function>, cpp17_constexpr>
+struct ContractPrecondition<Condition<condition_function>, cpp17_constexpr>
 {
   constexpr ContractPrecondition(Optimization precondition_optimization)
   : precondition_optimization_(precondition_optimization)
@@ -225,12 +215,12 @@ struct ContractPrecondition<PreCondition<condition_function>, cpp17_constexpr>
     return true;
   }
 
-  ContractCondition<ConditionType::PREC, condition_function, cpp17_constexpr> impl_;
+  ContractCondition<condition_function, cpp17_constexpr> impl_;
   Optimization precondition_optimization_;
 };
 
 template <typename Object, typename ... Arg, ConditionMemberFunction<Object, Arg...> condition_function, bool cpp17_constexpr>
-struct ContractPrecondition<PreCondition<condition_function>, cpp17_constexpr>
+struct ContractPrecondition<Condition<condition_function>, cpp17_constexpr>
 {
   constexpr ContractPrecondition(Optimization precondition_optimization)
   : precondition_optimization_(precondition_optimization)
@@ -241,7 +231,7 @@ struct ContractPrecondition<PreCondition<condition_function>, cpp17_constexpr>
     return true;
   }
 
-  ContractCondition<ConditionType::PREC, condition_function, cpp17_constexpr> impl_;
+  ContractCondition<condition_function, cpp17_constexpr> impl_;
   Optimization precondition_optimization_;
 };
 
@@ -256,7 +246,7 @@ template <typename Condition, typename Ret, typename Args, bool cpp17_constexpr>
 struct ContractPostcondition;
 
 template <typename Ret, typename ... Arg, ConditionFunction<Ret, Arg...> condition_function, bool cpp17_constexpr>
-struct ContractPostcondition<PostCondition<condition_function>, Ret, std::tuple<Arg...>, cpp17_constexpr>
+struct ContractPostcondition<Condition<condition_function>, Ret, std::tuple<Arg...>, cpp17_constexpr>
 {
   using RetT = std::remove_cv_t<std::remove_reference_t<Ret>>;
   constexpr void post_check(RetT const& arg1, Arg  ... arg, Optimization optimization = NoOpt) {
@@ -273,11 +263,11 @@ struct ContractPostcondition<PostCondition<condition_function>, Ret, std::tuple<
     return std::move(ret); // TODO support RVO
   }
 
-  ContractCondition<ConditionType::POSTC, condition_function, cpp17_constexpr> impl_;
+  ContractCondition<condition_function, cpp17_constexpr> impl_;
 };
 
 template <typename Object, typename Ret, typename ... Arg, ConditionMemberFunction<Object, Ret, Arg...> condition_function, bool cpp17_constexpr>
-struct ContractPostcondition<PostCondition<condition_function>, Ret, std::tuple<Arg...>, cpp17_constexpr>
+struct ContractPostcondition<Condition<condition_function>, Ret, std::tuple<Arg...>, cpp17_constexpr>
 {
   using RetT = std::remove_cv_t<std::remove_reference_t<Ret>>;
   constexpr void post_check(Object const* object, RetT const& arg1, Arg  ... arg, Optimization optimization = NoOpt) {
@@ -294,17 +284,17 @@ struct ContractPostcondition<PostCondition<condition_function>, Ret, std::tuple<
     return std::move(ret); // TODO support RVO
   }
 
-  ContractCondition<ConditionType::POSTC, condition_function, cpp17_constexpr> impl_;
+  ContractCondition<condition_function, cpp17_constexpr> impl_;
 };
 
 template <ConditionFunction<> condition_function, bool cpp17_constexpr>
-struct ContractPostcondition<PostCondition<condition_function>, void, std::tuple<>, cpp17_constexpr>
+struct ContractPostcondition<Condition<condition_function>, void, std::tuple<>, cpp17_constexpr>
 {
   constexpr void post_check(Optimization optimization = NoOpt) {
     impl_.check(optimization);
   }
 
-  ContractCondition<ConditionType::POSTC, condition_function, cpp17_constexpr> impl_;
+  ContractCondition<condition_function, cpp17_constexpr> impl_;
 };
 
 template <bool cpp17_constexpr>
@@ -334,13 +324,13 @@ struct Contract : contract_precondition_t<PreCondition, cpp17_constexpr>,
 };
 
 template <auto precondition_function, bool cpp17_constexpr = false>
-using Pre = Contract<PreCondition<precondition_function>, NoCondition, cpp17_constexpr>;
+using Pre = Contract<Condition<precondition_function>, NoCondition, cpp17_constexpr>;
 
 template <auto postcondition_function, bool cpp17_constexpr = false>
-using Post = Contract<NoCondition, PostCondition<postcondition_function>, cpp17_constexpr>;
+using Post = Contract<NoCondition, Condition<postcondition_function>, cpp17_constexpr>;
 
 template <auto precondition_function, auto postcondition_function, bool cpp17_constexpr = false>
-using PrePost = Contract<PreCondition<precondition_function>, PostCondition<postcondition_function>, cpp17_constexpr>;
+using PrePost = Contract<Condition<precondition_function>, Condition<postcondition_function>, cpp17_constexpr>;
 
 struct Contractual {
   template <typename ConstructorContract, typename ... Arg>
