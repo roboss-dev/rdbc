@@ -41,9 +41,10 @@ struct ContractViolation {
   std::size_t line = 0;
 };
 
-enum Optimization {
-  NoOpt,
-  Opt
+enum Mode {
+  TERMINATE,
+  THROW,
+  SKIP 
 };
 
 
@@ -64,11 +65,11 @@ constexpr bool check(bool predicate, const char* predicate_string, const char* f
 
 
 #ifdef NDEBUG
-constexpr auto SKIP_PRE_IN_RELEASE = Opt;
-constexpr auto SKIP_POST_IN_RELEASE = Opt;
+constexpr auto SKIP_PRE_IN_RELEASE = SKIP;
+constexpr auto SKIP_POST_IN_RELEASE = SKIP;
 #else
-constexpr auto SKIP_PRE_IN_RELEASE = NoOpt;
-constexpr auto SKIP_POST_IN_RELEASE = NoOpt;
+constexpr auto SKIP_PRE_IN_RELEASE = THROW;
+constexpr auto SKIP_POST_IN_RELEASE = THROW;
 #endif
 
 struct AnyCondition
@@ -159,12 +160,17 @@ template <auto condition_function, bool cpp17_constexpr = false>
 struct ContractCondition
 {
   template <typename ... Arg>
-  constexpr void check(Optimization optimization, Arg &&... arg) {
-    if(optimization != Opt && !invoke_condition_function<condition_function>(arg...)) {
+  constexpr void check(Mode mode, Arg &&... arg) {
+    if(mode != SKIP && !invoke_condition_function<condition_function>(arg...)) {
       if constexpr(RDBC_NOEXCEPT) {
-        std::cerr << "CONTRACT VIOLATION - the following condition was not true:\n\t" << internal::current_result.violation.condition
-          << "\nin file:\n\t " << internal::current_result.violation.file << "\nat line:\n\t " << internal::current_result.violation.line << std::endl;
-        std::terminate();
+        if (mode == TERMINATE) {
+          std::cerr << "CONTRACT VIOLATION - the following condition was not true:\n\t" << internal::current_result.violation.condition
+            << "\nin file:\n\t " << internal::current_result.violation.file << "\nat line:\n\t " << internal::current_result.violation.line << std::endl;
+          std::terminate();
+        }
+        else {
+          throw internal::current_result.violation;
+        }
       }
       else {
         throw internal::current_result.violation;
@@ -191,8 +197,8 @@ template <auto condition_function>
 struct ContractCondition<condition_function, true>
 {
   template <typename ... Arg>
-  constexpr void check(Optimization optimization, Arg &&... arg) {
-    if(optimization != Opt && !invoke_condition_function<condition_function>(arg...)) {
+  constexpr void check(Mode mode, Arg &&... arg) {
+    if(mode != SKIP && !invoke_condition_function<condition_function>(arg...)) {
       std::terminate();
     }
   }
@@ -204,39 +210,39 @@ struct ContractPrecondition;
 template <typename ... Arg, ConditionFunction<Arg...> condition_function, bool cpp17_constexpr>
 struct ContractPrecondition<Condition<condition_function>, cpp17_constexpr>
 {
-  constexpr ContractPrecondition(Optimization precondition_optimization)
-  : precondition_optimization_(precondition_optimization)
+  constexpr ContractPrecondition(Mode precondition_mode)
+  : mode_(precondition_mode)
   { }
 
   constexpr bool pre_check(Arg const& ... arg) {
-    impl_.check(precondition_optimization_, arg...);
+    impl_.check(mode_, arg...);
     return true;
   }
 
   ContractCondition<condition_function, cpp17_constexpr> impl_;
-  Optimization precondition_optimization_;
+  Mode mode_;
 };
 
 template <typename Object, typename ... Arg, ConditionMemberFunction<Object, Arg...> condition_function, bool cpp17_constexpr>
 struct ContractPrecondition<Condition<condition_function>, cpp17_constexpr>
 {
-  constexpr ContractPrecondition(Optimization precondition_optimization)
-  : precondition_optimization_(precondition_optimization)
+  constexpr ContractPrecondition(Mode precondition_mode)
+  : mode_(precondition_mode)
   { }
 
   constexpr bool pre_check(Object const* object, Arg const& ... arg) {
-    impl_.check(precondition_optimization_, object, arg...);
+    impl_.check(mode_, object, arg...);
     return true;
   }
 
   ContractCondition<condition_function, cpp17_constexpr> impl_;
-  Optimization precondition_optimization_;
+  Mode mode_;
 };
 
 template <bool cpp17_constexpr>
 struct ContractPrecondition<NoCondition, cpp17_constexpr>
 { 
-  constexpr ContractPrecondition(Optimization)
+  constexpr ContractPrecondition(Mode)
   { }
 };
 
@@ -247,17 +253,17 @@ template <typename Ret, typename ... Arg, ConditionFunction<Ret, Arg...> conditi
 struct ContractPostcondition<Condition<condition_function>, Ret, std::tuple<Arg...>, cpp17_constexpr>
 {
   using RetT = std::remove_cv_t<std::remove_reference_t<Ret>>;
-  constexpr void post_check(RetT const& arg1, Arg  ... arg, Optimization optimization = NoOpt) {
-    impl_.check(optimization, arg1, arg...);
+  constexpr void post_check(RetT const& arg1, Arg  ... arg, Mode mode = TERMINATE) {
+    impl_.check(mode, arg1, arg...);
   }
   [[nodiscard]]
-  constexpr RetT post_check_ret(RetT && ret, Arg  ... arg, Optimization optimization = NoOpt) {
-    impl_.check(optimization, ret, arg...);
+  constexpr RetT post_check_ret(RetT && ret, Arg  ... arg, Mode mode = TERMINATE) {
+    impl_.check(mode, ret, arg...);
     return ret; // TODO support RVO
   }
   [[nodiscard]]
-  constexpr RetT post_check_ret(RetT & ret, Arg ... arg, Optimization optimization = NoOpt) {
-    impl_.check(optimization, ret, arg...);
+  constexpr RetT post_check_ret(RetT & ret, Arg ... arg, Mode mode = TERMINATE) {
+    impl_.check(mode, ret, arg...);
     return std::move(ret); // TODO support RVO
   }
 
@@ -268,17 +274,17 @@ template <typename Object, typename Ret, typename ... Arg, ConditionMemberFuncti
 struct ContractPostcondition<Condition<condition_function>, Ret, std::tuple<Arg...>, cpp17_constexpr>
 {
   using RetT = std::remove_cv_t<std::remove_reference_t<Ret>>;
-  constexpr void post_check(Object const* object, RetT const& arg1, Arg  ... arg, Optimization optimization = NoOpt) {
-    impl_.check(optimization, object, arg1, arg...);
+  constexpr void post_check(Object const* object, RetT const& arg1, Arg  ... arg, Mode mode = TERMINATE) {
+    impl_.check(mode, object, arg1, arg...);
   }
   [[nodiscard]]
-  constexpr RetT post_check_ret(Object const* object, RetT && ret, Arg ... arg, Optimization optimization = NoOpt) {
-    impl_.check(optimization, object, ret, arg...);
+  constexpr RetT post_check_ret(Object const* object, RetT && ret, Arg ... arg, Mode mode = TERMINATE) {
+    impl_.check(mode, object, ret, arg...);
     return ret; // TODO support RVO
   }
   [[nodiscard]]
-  constexpr RetT post_check_ret(Object const* object, RetT & ret, Arg ... arg, Optimization optimization = NoOpt) {
-    impl_.check(optimization, object, ret, arg...);
+  constexpr RetT post_check_ret(Object const* object, RetT & ret, Arg ... arg, Mode mode = TERMINATE) {
+    impl_.check(mode, object, ret, arg...);
     return std::move(ret); // TODO support RVO
   }
 
@@ -288,8 +294,8 @@ struct ContractPostcondition<Condition<condition_function>, Ret, std::tuple<Arg.
 template <ConditionFunction<> condition_function, bool cpp17_constexpr>
 struct ContractPostcondition<Condition<condition_function>, void, std::tuple<>, cpp17_constexpr>
 {
-  constexpr void post_check(Optimization optimization = NoOpt) {
-    impl_.check(optimization);
+  constexpr void post_check(Mode mode = TERMINATE) {
+    impl_.check(mode);
   }
 
   ContractCondition<condition_function, cpp17_constexpr> impl_;
@@ -315,12 +321,12 @@ struct Contract : internal::contract_precondition_t<PreCondition, cpp17_constexp
   static_assert(std::is_base_of_v<internal::AnyCondition, PreCondition>, "PreCondition invalid");
   static_assert(std::is_base_of_v<internal::AnyCondition, PostCondition>, "PostCondition invalid");
 
-  constexpr Contract(Optimization precondition_optimization)
-  : internal::ContractPrecondition<PreCondition, cpp17_constexpr>(precondition_optimization)
+  constexpr Contract(Mode precondition_mode)
+  : internal::ContractPrecondition<PreCondition, cpp17_constexpr>(precondition_mode)
   { }
 
   constexpr Contract()
-  : Contract(NoOpt)
+  : Contract(TERMINATE)
   { }
 };
 

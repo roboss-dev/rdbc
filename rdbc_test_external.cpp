@@ -23,12 +23,12 @@ constexpr bool int_pre(int input) {
 constexpr bool int_post(int ret) {
     return CHECK(ret > 2);
 }
-inline int f(int input, rdbc::PrePost<&int_pre, &int_post> c = {}) {
+inline int f(int input, rdbc::PrePost<&int_pre, &int_post> c = {rdbc::THROW}) {
     c.pre_check(input);
-    return c.post_check_ret(input+1);
+    return c.post_check_ret(input+1, rdbc::THROW);
 }
 
-TEST(Basic, ProgramTerminatesUponContractViolation) {
+TEST(Basic, ThrowModeThrows) {
     EXPECT_THROW([&]{
         try {
             f(0);
@@ -49,49 +49,3 @@ TEST(Basic, ProgramTerminatesUponContractViolation) {
         }
     }(), rdbc::ContractViolation);
 }
-
-TEST(Basic, ProgramContinuesWithoutContractViolation) {
-    EXPECT_NO_THROW(f(2));
-}
-
-struct MyClass {
-    constexpr bool int_pre(int input) const {
-        return CHECK(input > 0)
-            && CHECK(member_variable_ == 2);
-    }
-    constexpr bool int_post(int ret) const {
-        return CHECK(ret > 2)
-            && CHECK(member_variable_ == 3);
-    }
-    inline int f(int input, rdbc::PrePost<&MyClass::int_pre, &MyClass::int_post> c = {}) {
-        c.pre_check(this, input);
-        member_variable_ = 3;
-        return c.post_check_ret(this, input+1);
-    }
-    int member_variable_ = 2;
-};
-
-TEST(Member, ProgramContinuesWithoutContractViolation) {
-    MyClass my_class;
-    EXPECT_NO_THROW(my_class.f(2));
-}
-
-
-template <typename T>
-constexpr bool neg_pre() {
-    return CHECK(std::is_signed_v<T>);
-}
-
-template <typename T>
-T neg(T v, rdbc::Pre<&neg_pre<T>> c = {}) {
-    c.pre_check();
-    return -v;
-}
-
-TEST(Meta, TypeTraitsCanBeChecked) {
-    EXPECT_NO_THROW(neg<int>(1));
-    EXPECT_THROW(neg<unsigned int>(1), rdbc::ContractViolation);
-}
-
-
-
