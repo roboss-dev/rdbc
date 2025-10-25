@@ -41,6 +41,11 @@ struct ContractViolation {
   std::size_t line = 0;
 };
 
+enum Optimization {
+  NoOpt,
+  Opt
+};
+
 
 namespace internal {
 
@@ -57,13 +62,6 @@ constexpr bool check(bool predicate, const char* predicate_string, const char* f
   return predicate;
 }
 
-
-}
-
-enum Optimization {
-  NoOpt,
-  Opt
-};
 
 #ifdef NDEBUG
 constexpr auto SKIP_PRE_IN_RELEASE = Opt;
@@ -307,15 +305,18 @@ using contract_precondition_t = ContractPrecondition<Condition, cpp17_constexpr>
 template <typename Condition, bool cpp17_constexpr>
 using contract_postcondition_t = ContractPostcondition<Condition, typename Condition::Ret, typename Condition::Args, cpp17_constexpr>;
 
+
+}
+
 template <typename PreCondition, typename PostCondition, bool cpp17_constexpr>
-struct Contract : contract_precondition_t<PreCondition, cpp17_constexpr>,
-                  contract_postcondition_t<PostCondition, cpp17_constexpr>
+struct Contract : internal::contract_precondition_t<PreCondition, cpp17_constexpr>,
+                  internal::contract_postcondition_t<PostCondition, cpp17_constexpr>
 {
-  static_assert(std::is_base_of_v<AnyCondition, PreCondition>, "PreCondition invalid");
-  static_assert(std::is_base_of_v<AnyCondition, PostCondition>, "PostCondition invalid");
+  static_assert(std::is_base_of_v<internal::AnyCondition, PreCondition>, "PreCondition invalid");
+  static_assert(std::is_base_of_v<internal::AnyCondition, PostCondition>, "PostCondition invalid");
 
   constexpr Contract(Optimization precondition_optimization)
-  : ContractPrecondition<PreCondition, cpp17_constexpr>(precondition_optimization)
+  : internal::ContractPrecondition<PreCondition, cpp17_constexpr>(precondition_optimization)
   { }
 
   constexpr Contract()
@@ -324,13 +325,13 @@ struct Contract : contract_precondition_t<PreCondition, cpp17_constexpr>,
 };
 
 template <auto precondition_function, bool cpp17_constexpr = false>
-using Pre = Contract<Condition<precondition_function>, NoCondition, cpp17_constexpr>;
+using Pre = Contract<internal::Condition<precondition_function>, internal::NoCondition, cpp17_constexpr>;
 
 template <auto postcondition_function, bool cpp17_constexpr = false>
-using Post = Contract<NoCondition, Condition<postcondition_function>, cpp17_constexpr>;
+using Post = Contract<internal::NoCondition, internal::Condition<postcondition_function>, cpp17_constexpr>;
 
 template <auto precondition_function, auto postcondition_function, bool cpp17_constexpr = false>
-using PrePost = Contract<Condition<precondition_function>, Condition<postcondition_function>, cpp17_constexpr>;
+using PrePost = Contract<internal::Condition<precondition_function>, internal::Condition<postcondition_function>, cpp17_constexpr>;
 
 struct Contractual {
   template <typename ConstructorContract, typename ... Arg>
