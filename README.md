@@ -62,6 +62,8 @@ private:
 - Contract is (optionally) part of the function declaration
 - Program termination if the pre- or postconditions of the function are not checked
 - Preconditions may be switched off on the call site
+- Constructor preconditions
+- Conditions can also be explicitly checked on call site
 - Contract semantics configurable via compiler flags (TODO) 
 
 # Further Resources <a name="resources"></a>
