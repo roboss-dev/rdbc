@@ -10,10 +10,10 @@ Free functions:
 ```c++
 using namespace rdbc = roboss::dbc;
 constexpr bool f_pre(int input1) {
-  return PRE(input1 > 2);
+  return CHECK(input1 > 2);
 }
 constexpr bool f_post(double ret) {
-  return POST(ret < 0.5);
+  return CHECK(ret < 0.5);
 }
 double f(int input1, rdbc::PrePost<&f_pre, &f_post> contract = {}) {
   contract.pre_check(input1);
@@ -25,15 +25,24 @@ double f(int input1, rdbc::PrePost<&f_pre, &f_post> contract = {}) {
 Member functions:
 ```c++
 using namespace rdbc = roboss::dbc;
-class MyClass {
+class MyClass : rdbc::Contractual {
 public:
-  constexpr bool f_pre(int input1) {
-    return PRE(input1 > 2)
-        && PRE(a_member_variable_ == 2);
+  static constexpr bool class_precond(int member_var) {
+    return CHECK(member_var > 1)
   }
-  constexpr bool f_post(double ret) {
-    return POST(ret < 0.5)
-        && POST(a_member_variable_ == 3);
+
+  MyClass(int member_var = 2, rdbc::Pre<&MyClass::class_precond> contract = {})
+  : rdbc::Contractual(contract, member_var),
+    a_member_variable_{member_var}
+  {}
+
+  constexpr bool f_pre(int input1) const {
+    return CHECK(input1 > 2)
+        && CHECK(a_member_variable_ == 2);
+  }
+  constexpr bool f_post(double ret) const {
+    return CHECK(ret < 0.5)
+        && CHECK(a_member_variable_ == 3);
   }
   double f(int input1, rdbc::PrePost<&MyClass::f_pre, &MyClass::f_post> contract = {}) {
     contract.pre_check(this, input1);
@@ -43,7 +52,7 @@ public:
   }
 
 private:
-  int a_member_variable_ = 2;
+  int a_member_variable_;
 };
 ```
 
